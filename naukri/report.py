@@ -5,8 +5,32 @@ from datetime import datetime
 from html import escape
 
 
+SECTION_NAMES = {"headline": "headline", "keyskills": "key skills", "itskills": "IT skills"}
+
+
 def _list(items: list[str]) -> str:
     return escape(", ".join(items)) if items else "—"
+
+
+def summary_line(results: dict[str, tuple[str, dict]], dry_run: bool) -> str:
+    """One line for WhatsApp templates (no newlines allowed), e.g.
+    'profile updated - headline re-ordered, key skill Python refreshed, IT skill Argocd re-saved'."""
+    parts = []
+    for name, (status, data) in results.items():
+        if status == "fail":
+            parts.append(f"{SECTION_NAMES[name]} failed")
+        elif name == "headline":
+            parts.append("headline updated" if data["old"] != data["new"] else "headline re-saved")
+        elif name == "keyskills":
+            if data["added"] and {s.lower() for s in data["added"]} == {s.lower() for s in data["removed"]}:
+                parts.append(f"key skill {', '.join(data['added'])} refreshed")
+            elif data["added"] or data["removed"]:
+                parts.append(f"key skills +{len(data['added'])} -{len(data['removed'])}")
+        elif name == "itskills":
+            parts.append(f"IT skill {data['skill']} re-saved")
+    ok = all(s == "ok" for s, _ in results.values())
+    head = "dry run" if dry_run else ("profile updated" if ok else "profile update needs attention")
+    return f"{head} - {', '.join(parts)}" if parts else head
 
 
 def format_report(results: dict[str, tuple[str, dict]], dry_run: bool, last_updated: str) -> str:
