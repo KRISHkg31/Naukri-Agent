@@ -52,30 +52,6 @@ journalctl -u naukri-bot -n 100 --no-pager  # what it did
 sudo systemctl restart naukri-bot           # after deploying new code
 ```
 
-### WhatsApp (optional, alongside Telegram)
-
-Friends without Telegram can use WhatsApp via Meta's official **WhatsApp Cloud API**.
-Same commands, with or without the slash (`status`, `login`, `dryrun`…).
-
-- **Login:** `login` sends a one-time link (valid 15 min, single use) to a small page served
-  by the bot, because the Cloud API cannot delete a password typed into the chat. OTPs are
-  replied to in the WhatsApp chat.
-- **24 h rule:** WhatsApp only allows free-form messages within 24 h of the user's last
-  message. Outside that window the bot sends the approved utility template `naukri_update`
-  with a one-line summary, and the full report is shown when they reply `report`.
-- **Needs:** a public HTTPS address. `bash deploy/setup_https.sh <name>.duckdns.org`
-  installs Caddy (free Let's Encrypt certificate), opens ports 80/443 on the VM and
-  prints the webhook URL + verify token for Meta. Also add ingress rules for TCP 80/443
-  in the Oracle security list.
-- **.env:** `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`,
-  `WHATSAPP_VERIFY_TOKEN`, `PUBLIC_BASE_URL`. If any are missing, the bot runs Telegram-only.
-
-Template to create in WhatsApp Manager (category **Utility**, language **English**, name `naukri_update`):
-
-```
-Naukri profile bot: {{1}}
-```
-
 Capacity: about 1 minute per user per run, so the 1 GB VM is fine for roughly 15-20 users.
 Many accounts logging in from one server IP can get flagged by Naukri, so keep it to a
 small group of friends.

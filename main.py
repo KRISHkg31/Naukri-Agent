@@ -179,33 +179,14 @@ def _session_key() -> str:
 def cmd_bot(args) -> int:
     """Multi-user Telegram bot + built-in daily schedule (runs forever)."""
     from naukri.bot import Bot
-    from naukri.channels import TelegramChannel, WhatsAppChannel
 
     cfg = load_config(CONFIG_FILE)
     token, admin = os.getenv("TELEGRAM_BOT_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
     if not token or not admin:
         print("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID (the admin) must be set in .env")
         return 1
-    whatsapp = None
-    wa_vars = ("WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
-               "PUBLIC_BASE_URL")
-    if all(os.getenv(v) for v in wa_vars):
-        whatsapp = WhatsAppChannel(
-            token=os.getenv("WHATSAPP_TOKEN"),
-            phone_number_id=os.getenv("WHATSAPP_PHONE_NUMBER_ID"),
-            app_secret=os.getenv("WHATSAPP_APP_SECRET"),
-            verify_token=os.getenv("WHATSAPP_VERIFY_TOKEN"),
-            base_url=os.getenv("PUBLIC_BASE_URL"),
-            template=os.getenv("WHATSAPP_TEMPLATE", "naukri_update"),
-            template_lang=os.getenv("WHATSAPP_TEMPLATE_LANG", "en"),
-            port=int(os.getenv("WEB_PORT", "8080")),
-            api_version=os.getenv("WHATSAPP_API_VERSION", "v23.0"),
-        )
-    elif any(os.getenv(v) for v in wa_vars):
-        missing = [v for v in wa_vars if not os.getenv(v)]
-        log.warning("WhatsApp disabled - missing in .env: %s", ", ".join(missing))
-    Bot(admin, USERS_DIR, _session_key(), cfg["schedule"]["run_hours"], cfg["schedule"]["max_jitter_seconds"],
-        DATA_DIR / "bot_slots.json", telegram=TelegramChannel(token), whatsapp=whatsapp).run()
+    Bot(token, admin, USERS_DIR, _session_key(), cfg["schedule"]["run_hours"],
+        cfg["schedule"]["max_jitter_seconds"], DATA_DIR / "bot_slots.json").run()
     return 0
 
 
