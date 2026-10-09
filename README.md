@@ -44,7 +44,15 @@ session is kept, encrypted with `SESSION_KEY`, in `data/users/<chat_id>/session.
 If Naukri asks for an OTP, the bot asks them for it. When a session expires they get
 a message to `/login` again.
 
-User commands: `/login /status /dryrun /runnow /pause /resume /delete /cancel /help`
+User commands: `/findjob /login /status /dryrun /runnow /pause /resume /delete /cancel /help`
+
+**`/findjob <keyword> [years]`** searches Naukri for jobs posted in the last 24 hours, newest
+first, and replies with the top 15 (title, company, experience, location, when posted, link).
+It never applies to anything and doesn't need a Naukri login. Shortcuts `backend`, `frontend`,
+`fullstack`, `devops`, `data`, `testing`/`qa` search the role and match common job-title
+words for it (e.g. backend also matches Java / Node / Python / .NET developer titles). Any
+other keyword (e.g. `kubernetes`) matches job titles first, then the job's skill tags.
+`/findjob` alone shows quick-pick buttons. Example: `/findjob devops 2`.
 Admin commands: `/users /approve <id> /deny <id> /remove <id>`
 
 ```bash

@@ -23,6 +23,7 @@ import requests
 
 from naukri.browser import LoginError, NaukriBrowser
 from naukri.notifier import Notifier
+from naukri.jobsearch import QUICK_PICKS, find_jobs, format_jobs, parse_query
 from naukri.report import format_report
 from naukri.runner import run_update
 from naukri.users import User, all_users
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 HELP = """<b>Naukri profile bot</b>
 I re-save your Naukri profile at {hours} IST every day so it shows as recently updated - nothing is added or removed.
 
+/findjob devops - jobs posted in the last 24 h (add your years of experience: /findjob backend 2)
 /login - connect your Naukri account
 /status - your status and last run
 /dryrun - test run, saves nothing
@@ -50,6 +52,7 @@ ADMIN_HELP = """
 /remove &lt;id&gt; - delete a user and their data"""
 
 MENU = [
+    ("findjob", "Search jobs posted in the last 24 hours"),
     ("login", "Connect your Naukri account"),
     ("status", "Your status and last run"),
     ("dryrun", "Test run, saves nothing"),
@@ -173,6 +176,8 @@ class Bot:
         if cmd == "/cancel":
             self.conv.pop(chat, None)
             return self.send(chat, "Cancelled.")
+        if cmd == "/findjob":
+            return self._findjob_request(chat, arg)
         if cmd == "/login":
             self.conv[chat] = {"step": "email"}
             return self.send(chat, "🔐 <b>Connect Naukri</b>\n\nSend the <b>email</b> you use to log in to Naukri.\n"
@@ -257,11 +262,17 @@ class Bot:
         return [[("✅ Approve", f"approve:{uid}"), ("❌ Deny", f"deny:{uid}")]]
 
     def on_button(self, cq: dict) -> None:
-        """Approve / Deny buttons under a join request (admin only)."""
+        """Inline buttons: /findjob quick picks (any approved user), Approve / Deny (admin only)."""
         self.api("answerCallbackQuery", callback_query_id=cq["id"])
-        if str(cq.get("from", {}).get("id")) != self.admin_id:
-            return
+        presser = str(cq.get("from", {}).get("id"))
         action, _, uid = (cq.get("data") or "").partition(":")
+        if action == "findjob":
+            user = User(self.root, presser)
+            if user.exists and user.status != "pending":
+                self._findjob_request(presser, uid)
+            return
+        if presser != self.admin_id:
+            return
         if action not in ("approve", "deny") or not uid:
             return
         msg = cq.get("message") or {}
@@ -269,6 +280,23 @@ class Bot:
             self.api("editMessageReplyMarkup", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
                      reply_markup=json.dumps({"inline_keyboard": []}))
         self._admin(f"/{action}", uid)
+
+    def _findjob_request(self, chat: str, query: str) -> None:
+        keyword, exp = parse_query(query)
+        if not keyword:
+            rows = [QUICK_PICKS[:3], QUICK_PICKS[3:]]
+            return self.send(chat, "🔎 Which jobs should I look for? Tap one, or type e.g. "
+                                   "<code>/findjob devops 2</code> (the number = your years of experience, optional).",
+                             buttons=[[(label, f"findjob:{key}") for label, key in row] for row in rows])
+        self._enqueue(chat, f"findjob {keyword!r} for {chat}", lambda: self._findjob(chat, keyword, exp))
+
+    def _findjob(self, chat: str, keyword: str, exp: Optional[int]) -> None:
+        try:
+            jobs, total, matched = find_jobs(keyword, exp)
+        except Exception as e:
+            log.exception("findjob failed")
+            return self.send(chat, f"❌ Job search failed: {escape(str(e).splitlines()[0][:150])}")
+        self.send(chat, format_jobs(keyword, exp, jobs, total, matched))
 
     # --- Jobs (worker thread) -------------------------------------------------
 
