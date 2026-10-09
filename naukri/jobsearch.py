@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -73,37 +74,75 @@ def search_url(keyword: str, experience: Optional[int], page_no: int = 1) -> str
     return url
 
 
-def find_jobs(keyword: str, experience: Optional[int], limit: int = 15) -> tuple[list[Job], Optional[int], bool]:
+class SearchSession:
+    """A browser kept open between searches (a warm search takes ~4 s instead of ~15 s).
+
+    Playwright objects belong to the thread that created them, so every method must be
+    called from the bot's single worker thread.
+    """
+
+    IDLE_CLOSE_S = 600
+
+    def __init__(self):
+        self._nb: Optional[NaukriBrowser] = None
+        self.last_used = 0.0
+
+    def page(self):
+        if self._nb is None:
+            # No login needed for search; a throwaway session keeps users' sessions untouched.
+            self._nb = NaukriBrowser(PlainStore(Path("/nonexistent/search-session.json")), fresh=True)
+            self._nb.__enter__()
+        self.last_used = time.time()
+        return self._nb.page
+
+    def idle_for(self) -> float:
+        return time.time() - self.last_used if self._nb else 0.0
+
+    def close(self) -> None:
+        if self._nb is not None:
+            try:
+                self._nb.__exit__(None, None, None)
+            except Exception as e:
+                log.warning("Closing search browser failed: %s", e)
+            self._nb = None
+
+
+_CACHE: dict[tuple[str, Optional[int]], tuple[float, tuple]] = {}
+CACHE_S = 600
+
+
+def find_jobs(keyword: str, experience: Optional[int], limit: int = 15,
+              session: Optional[SearchSession] = None) -> tuple[list[Job], Optional[int], bool]:
     """Newest-first jobs from the last 24 h whose title matches, Naukri's total count,
     and whether these are title matches (False = no matches, showing Naukri's results as-is)."""
+    key = (keyword.lower(), experience)
+    if key in _CACHE and time.time() - _CACHE[key][0] < CACHE_S:
+        return _CACHE[key][1]
+    own = session is None
+    session = session or SearchSession()
+    try:
+        result = _search(session.page(), keyword, experience, limit)
+    except Exception:
+        session.close()  # a broken page shouldn't be reused
+        raise
+    finally:
+        if own:
+            session.close()
+    _CACHE[key] = (time.time(), result)
+    return result
+
+
+def _search(page, keyword: str, experience: Optional[int], limit: int) -> tuple[list[Job], Optional[int], bool]:
     jobs: list[Job] = []
     total = None
-    # No login needed for search; a throwaway session keeps users' sessions untouched.
-    with NaukriBrowser(PlainStore(Path("/nonexistent/search-session.json")), fresh=True) as nb:
-        page = nb.page
-        for page_no in (1, 2, 3):
-            page.goto(search_url(keyword, experience, page_no), wait_until="domcontentloaded")
-            try:
-                page.locator(".srp-jobtuple-wrapper").first.wait_for(timeout=15_000)
-            except PWTimeout:
-                break
-            page.wait_for_timeout(1000)
-            if total is None:
-                m = re.search(r"([\d,]+)\s+.*?Job", page.title())
-                total = int(m.group(1).replace(",", "")) if m else None
-            found = page.locator(".srp-jobtuple-wrapper").evaluate_all(
-                """els => els.map(e => {
-                    const t = s => { const x = e.querySelector(s); return x ? x.innerText.trim() : ''; };
-                    const a = e.querySelector('a.title');
-                    return {title: a ? a.innerText.trim() : '', url: a ? a.href : '',
-                            company: t('.comp-name'), experience: t('.expwdth'), location: t('.locWdth'),
-                            posted: t('.job-post-day'), salary: t('.sal-wrap span[title], .sal'),
-                            tags: [...e.querySelectorAll('.tags-gt li')].map(li => li.innerText.trim())};
-                })"""
-            )
-            jobs += [Job(**j) for j in found if j["title"] and j["url"]]
-            if sum(_match_rank(j, keyword) == 0 for j in jobs) >= limit or len(found) < 15:
-                break
+    for page_no in (1, 2):
+        found, count = _load_results(page, search_url(keyword, experience, page_no))
+        if total is None:
+            total = count
+        jobs += found
+        # A second page only when the first had too few relevant jobs.
+        if sum(_match_rank(j, keyword) < 2 for j in jobs) >= 8 or len(found) < 15:
+            break
     # Newest-first results include loosely related jobs: keep only title matches,
     # unless nothing matches at all.
     # Title matches first (newest first within each group), then skill-tag matches.
@@ -114,6 +153,59 @@ def find_jobs(keyword: str, experience: Optional[int], limit: int = 15) -> tuple
 
 
 GENERIC_WORDS = {"developer", "engineer", "jobs", "job", "senior", "junior", "and", "for", "in"}
+
+
+def _load_results(page, url: str) -> tuple[list[Job], Optional[int]]:
+    """Jobs on one results page. Reads the job data the page itself receives from Naukri
+    (~3 s) instead of waiting for the page to draw it (~10 s more on the small VM)."""
+    try:
+        with page.expect_response(lambda r: "/jobapi/" in r.url and "/search" in r.url and r.status == 200,
+                                  timeout=20_000) as info:
+            page.goto(url, wait_until="commit")
+        data = info.value.json()
+        page.evaluate("window.stop()")  # don't spend CPU drawing a page we won't read
+        return [_from_api(j) for j in data.get("jobDetails", []) if j.get("title")], data.get("noOfJobs")
+    except Exception as e:
+        log.info("Job data not captured (%s) - reading the page instead", str(e).splitlines()[0][:100])
+    page.goto(url, wait_until="domcontentloaded")
+    try:
+        page.locator(".srp-jobtuple-wrapper").first.wait_for(timeout=20_000)
+    except PWTimeout:
+        return [], None
+    found = page.locator(".srp-jobtuple-wrapper").evaluate_all(
+        """els => els.map(e => {
+            const t = s => { const x = e.querySelector(s); return x ? x.innerText.trim() : ''; };
+            const a = e.querySelector('a.title');
+            return {title: a ? a.innerText.trim() : '', url: a ? a.href : '',
+                    company: t('.comp-name'), experience: t('.expwdth'), location: t('.locWdth'),
+                    posted: t('.job-post-day'), salary: t('.sal-wrap span[title], .sal'),
+                    tags: [...e.querySelectorAll('.tags-gt li')].map(li => li.innerText.trim())};
+        })"""
+    )
+    return [Job(**j) for j in found if j["title"] and j["url"]], _total_count(page)
+
+
+def _from_api(j: dict) -> Job:
+    labels = {p.get("type"): p.get("label", "") for p in j.get("placeholders") or []}
+    url = j.get("jdURL") or ""
+    return Job(
+        title=j.get("title", "").strip(),
+        company=j.get("companyName", "").strip(),
+        url=url if url.startswith("http") else "https://www.naukri.com" + url,
+        experience=labels.get("experience", ""),
+        location=labels.get("location", ""),
+        posted=j.get("footerPlaceholderLabel", ""),
+        salary=labels.get("salary", ""),
+        tags=[t.strip() for t in (j.get("tagsAndSkills") or "").split(",") if t.strip()],
+    )
+
+
+def _total_count(page) -> Optional[int]:
+    """Naukri shows e.g. '1 - 20 of 308'; fall back to the page title ('... Jobs - 308 ...')."""
+    counter = page.locator("[class*='count-string']").first
+    text = counter.inner_text() if counter.count() else ""
+    m = re.search(r"of\s+([\d,]+)", text) or re.search(r"Jobs\s*-\s*([\d,]+)", page.title())
+    return int(m.group(1).replace(",", "")) if m else None
 
 
 def _has_term(text: str, term: str) -> bool:

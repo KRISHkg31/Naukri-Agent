@@ -23,7 +23,7 @@ import requests
 
 from naukri.browser import LoginError, NaukriBrowser
 from naukri.notifier import Notifier
-from naukri.jobsearch import QUICK_PICKS, find_jobs, format_jobs, parse_query
+from naukri.jobsearch import QUICK_PICKS, SearchSession, find_jobs, format_jobs, parse_query
 from naukri.report import format_report
 from naukri.runner import run_update
 from naukri.users import User, all_users
@@ -79,6 +79,7 @@ class Bot:
         self.conv: dict[str, dict] = {}          # chat -> {"step": "email"|"password", "email": ...}
         self.otp_waiters: dict[str, queue.Queue] = {}
         self.busy: Optional[str] = None
+        self.search = SearchSession()  # warm browser for /findjob, owned by the worker thread
         self.root.mkdir(parents=True, exist_ok=True)
 
     # --- Telegram plumbing ------------------------------------------------
@@ -288,11 +289,14 @@ class Bot:
             return self.send(chat, "🔎 Which jobs should I look for? Tap one, or type e.g. "
                                    "<code>/findjob devops 2</code> (the number = your years of experience, optional).",
                              buttons=[[(label, f"findjob:{key}") for label, key in row] for row in rows])
-        self._enqueue(chat, f"findjob {keyword!r} for {chat}", lambda: self._findjob(chat, keyword, exp))
+        ahead = self.jobs.qsize() + (1 if self.busy else 0)
+        self.jobs.put((f"findjob {keyword!r} for {chat}", lambda: self._findjob(chat, keyword, exp)))
+        wait = f" ({ahead} job(s) ahead)" if ahead else ""
+        self.send(chat, f"🔎 Searching Naukri for <b>{escape(keyword.title())}</b> jobs from the last 24 hours…{wait}")
 
     def _findjob(self, chat: str, keyword: str, exp: Optional[int]) -> None:
         try:
-            jobs, total, matched = find_jobs(keyword, exp)
+            jobs, total, matched = find_jobs(keyword, exp, session=self.search)
         except Exception as e:
             log.exception("findjob failed")
             return self.send(chat, f"❌ Job search failed: {escape(str(e).splitlines()[0][:150])}")
@@ -307,7 +311,14 @@ class Bot:
 
     def _worker(self) -> None:
         while True:
-            label, fn = self.jobs.get()
+            try:
+                label, fn = self.jobs.get(timeout=30)
+            except queue.Empty:
+                if self.search.idle_for() > SearchSession.IDLE_CLOSE_S:
+                    self.search.close()
+                continue
+            if not label.startswith("findjob"):
+                self.search.close()  # never run two browsers at once on the 1 GB VM
             self.busy = label
             log.info("Job start: %s", label)
             try:
