@@ -98,9 +98,11 @@ class Bot:
             extra["reply_markup"] = json.dumps(
                 {"inline_keyboard": [[{"text": t, "callback_data": d} for t, d in row] for row in buttons]}
             )
-        for i in range(0, len(text), 3900):
-            self.api("sendMessage", chat_id=chat, text=text[i : i + 3900], parse_mode="HTML",
-                     disable_web_page_preview="true", **extra)
+        chunks = _split_message(text)
+        for n, chunk in enumerate(chunks):
+            # Buttons go on the last part only.
+            self.api("sendMessage", chat_id=chat, text=chunk, parse_mode="HTML",
+                     disable_web_page_preview="true", **(extra if n == len(chunks) - 1 else {}))
 
     def run(self) -> None:
         self.api("setMyCommands", commands=json.dumps([{"command": c, "description": d} for c, d in MENU]))
@@ -443,6 +445,24 @@ class Bot:
         if user.status == "active":
             lines.append(f"<b>Next update:</b> {self._next_slot():%a %I:%M %p}")
         return "\n".join(lines)
+
+
+def _split_message(text: str, limit: int = 3900) -> list[str]:
+    """Split on line breaks so an HTML tag/link is never cut in half (Telegram rejects
+    the whole message then). Our messages never open a tag on one line and close it on another."""
+    chunks, current = [], ""
+    for line in text.split("\n"):
+        while len(line) > limit:  # a single huge line: cut it (rare, plain text)
+            chunks.append(line[:limit])
+            line = line[limit:]
+        if current and len(current) + 1 + len(line) > limit:
+            chunks.append(current)
+            current = line
+        else:
+            current = f"{current}\n{line}" if current else line
+    if current:
+        chunks.append(current)
+    return chunks or [""]
 
 
 def _mask(email: str) -> str:
