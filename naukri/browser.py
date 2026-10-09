@@ -40,10 +40,12 @@ class LoginError(RuntimeError):
 
 
 class NaukriBrowser:
-    def __init__(self, store: "Path | PlainStore", headless: bool = True, slow_mo: int = 0):
+    def __init__(self, store: "Path | PlainStore", headless: bool = True, slow_mo: int = 0, fresh: bool = False):
+        """fresh=True ignores any saved session (start logged out); it is still saved to `store`."""
         self.store = PlainStore(store) if isinstance(store, Path) else store
         self.headless = headless
         self.slow_mo = slow_mo
+        self.fresh = fresh
 
     def __enter__(self) -> "NaukriBrowser":
         self._pw = sync_playwright().start()
@@ -61,7 +63,7 @@ class NaukriBrowser:
             locale="en-IN",
             timezone_id="Asia/Kolkata",
         )
-        state = self.store.load()
+        state = None if self.fresh else self.store.load()
         if state:
             kwargs["storage_state"] = state
         self.context = self.browser.new_context(**kwargs)
@@ -107,7 +109,17 @@ class NaukriBrowser:
     def login(self, email: str, password: str, otp_provider: Optional[Callable[[], str]] = None) -> None:
         page = self.page
         page.goto(LOGIN_URL, wait_until="domcontentloaded")
-        page.locator("#usernameField").fill(email)
+        field = page.locator("#usernameField")
+        try:
+            field.wait_for(state="visible", timeout=15_000)
+        except PWTimeout:
+            # A still-valid session makes Naukri redirect away from the login page.
+            if "nlogin" not in page.url and self.open_profile():
+                log.info("Already logged in")
+                self.save_session()
+                return
+            raise LoginError("Naukri's login form did not load - try again in a few minutes")
+        field.fill(email)
         page.locator("#passwordField").fill(password)
         page.locator("button[type='submit']").first.click()
 
@@ -119,6 +131,9 @@ class NaukriBrowser:
                 break
             if page.locator("iframe[src*='recaptcha'], iframe[title*='captcha' i]").count():
                 raise LoginError("Naukri showed a captcha - log in manually with `python main.py login`")
+            errors = [t.strip() for t in page.locator(".commonErrorMsg:visible, .erLbl:visible").all_inner_texts()]
+            if any(errors):
+                raise LoginError("Naukri said: " + " ".join(e for e in errors if e))
             if not otp_done and page.locator(OTP_INPUTS).count():
                 if otp_provider is None:
                     raise LoginError("Naukri asked for an OTP and no OTP provider is configured")

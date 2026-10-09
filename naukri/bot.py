@@ -268,7 +268,7 @@ class Bot:
 
     def _login(self, user: User, email: str, password: str) -> None:
         try:
-            with NaukriBrowser(user.store(self.key)) as nb:
+            with NaukriBrowser(user.store(self.key), fresh=True) as nb:
                 nb.login(email, password, otp_provider=lambda: self._ask_otp(user.id))
                 headline = nb.page.locator("#lazyResumeHead, .resumeHeadline").first
                 headline_text = " ".join(headline.inner_text().split())[:200] if headline.count() else ""
