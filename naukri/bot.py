@@ -30,7 +30,7 @@ from naukri.users import User, all_users
 log = logging.getLogger(__name__)
 
 HELP = """<b>Naukri profile bot</b>
-I refresh your Naukri profile at {hours} IST every day so it shows as recently updated - using only what's already on your profile.
+I re-save your Naukri profile at {hours} IST every day so it shows as recently updated - nothing is added or removed.
 
 /login - connect your Naukri account
 /status - your status and last run
@@ -338,7 +338,7 @@ class Bot:
         try:
             results, last_updated = run_update(
                 user.store(self.key), user.state_path, user.log_dir,
-                rotate_cfg=user.rotate_cfg(), dry_run=dry_run,
+                rotate_cfg=None, dry_run=dry_run,  # re-save only: nothing added or removed
                 on_failure_shot=lambda shot, caption: notifier.send_photo(shot, caption),
             )
         except LoginError:
@@ -398,7 +398,7 @@ class Bot:
         lines = [f"<b>Status:</b> {labels.get(user.status, user.status)}"]
         if user.meta.get("email_hint"):
             lines.append(f"<b>Naukri account:</b> {escape(user.meta['email_hint'])}")
-        lines.append(f"<b>Mode:</b> {'custom rotation' if user.config_path.exists() else 'refresh (uses only your own profile)'}")
+        lines.append("<b>Mode:</b> re-save only (nothing is added or removed)")
         lines.append(f"<b>Last update:</b> {user.meta.get('last_run', 'never')}"
                      + (" (⚠️ partial)" if user.meta.get("last_result") == "warning" else ""))
         if user.status == "active":

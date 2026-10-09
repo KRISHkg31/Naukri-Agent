@@ -89,22 +89,6 @@ def _cancel(page: Page) -> None:
 
 # --- Resume headline -------------------------------------------------------
 
-def rotate_headline_parts(text: str) -> str:
-    """Keep the first '|' part (the job title) and rotate the rest by one.
-
-    Same facts, different order. Headlines without at least 3 '|' parts get their final
-    full stop toggled instead ("...Ready." <-> "...Ready"), so every run is a real edit.
-    """
-    parts = [p.strip() for p in text.split("|")]
-    if len(parts) < 3:
-        text = text.rstrip()
-        if text.endswith("."):
-            return text[:-1].rstrip()
-        return text + "." if len(text) < 250 else text
-    rest = parts[1:]
-    return " | ".join([parts[0]] + rest[1:] + rest[:1])
-
-
 def update_headline(page: Page, text: "str | Callable[[str], str]", dry_run: bool = False) -> dict:
     """Set the headline to `text`, or to text(current_headline) when given a function."""
     editor = open_editor(page, "Resume headline")

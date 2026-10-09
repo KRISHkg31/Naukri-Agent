@@ -32,9 +32,11 @@ def snapshot(page, log_dir: Path, name: str) -> Path:
 
 
 def load_toggle_state(path: Path) -> dict:
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {"skill_index": -1, "it_index": -1, "history": []}
+    state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    # Files written by the old rotation mode lack some of these keys.
+    for key, default in (("skill_index", -1), ("it_index", -1), ("history", [])):
+        state.setdefault(key, default)
+    return state
 
 
 def run_update(
@@ -86,7 +88,8 @@ def run_update(
 
     if toggle:
         steps = {
-            "headline": lambda p: sections.update_headline(p, sections.rotate_headline_parts, dry_run),
+            # Re-save the headline exactly as it is.
+            "headline": lambda p: sections.update_headline(p, lambda current: current, dry_run),
             "keyskills": keyskills_toggle,
             "itskills": itskills_toggle,
         }

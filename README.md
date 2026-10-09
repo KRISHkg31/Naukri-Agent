@@ -31,10 +31,11 @@ On the VM the agent runs as **`naukri-bot.service`**, which replaces the old tim
 one always-on process that answers Telegram messages and updates every active user
 at the hours in `schedule.run_hours` (one browser at a time).
 
-| Who | How it updates the profile |
-|---|---|
-| Admin (you, `TELEGRAM_CHAT_ID`) | *Custom rotation*: your `config.yaml` lists (copied in with `main.py adopt-me`) |
-| Friends | *Refresh mode*: only their own profile is used - headline parts re-ordered (title stays first), one of their own key skills removed and re-added (cancelled without saving if re-adding fails), one of their own IT skills rows re-saved |
+Every user (including the admin) gets the same **re-save only** update - nothing is added or removed:
+
+- **Resume headline** - opened and saved with exactly the same text
+- **Key skills** - one of their own skills is removed and that same skill added straight back, then saved (if re-adding fails the editor is closed without saving, so a skill can never be lost)
+- **IT skills** - one of their own rows is opened and saved unchanged
 
 **Onboarding a friend:** they open the bot → `/start` → you get a message → `/approve <id>` →
 they `/login` and send their Naukri email and password. The password message is deleted

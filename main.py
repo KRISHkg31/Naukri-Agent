@@ -1,4 +1,4 @@
-﻿"""Naukri profile refresh agent.
+"""Naukri profile refresh agent.
 
 Commands:
   python main.py login              one-time: log in in a visible browser and save the session
@@ -208,9 +208,8 @@ def cmd_adopt_me(args) -> int:
     user.store(_session_key()).save(session)
     if STATE_FILE.exists():
         shutil.copy(STATE_FILE, user.state_path)
-    shutil.copy(CONFIG_FILE, user.config_path)  # keeps your rotation lists ("custom rotation" mode)
     user.save(status="active")
-    print(f"Adopted into {user.dir} (session encrypted, rotation state + config copied).")
+    print(f"Adopted into {user.dir} (session encrypted).")
     return 0
 
 
