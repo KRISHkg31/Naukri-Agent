@@ -1,0 +1,54 @@
+name: Deploy to Oracle VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q main.py naukri
+      - run: python main.py validate
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      HOST: ${{ secrets.ORACLE_HOST }}
+      TARGET: ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}
+    steps:
+      # Skipped (not failed) until the ORACLE_* repo secrets are configured.
+      - name: Check secrets
+        id: secrets
+        run: echo "ready=$([ -n "$HOST" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+
+      - name: Set up SSH key
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ORACLE_SSH_KEY }}" > ~/.ssh/id_oracle
+          chmod 600 ~/.ssh/id_oracle
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync code (keeps .env, user data and logs on the VM)
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          rsync -az --delete \
+            --exclude '.git' --exclude '.venv' --exclude 'data/' --exclude 'logs/' --exclude '.env' \
+            -e "ssh -i ~/.ssh/id_oracle" ./ "$TARGET:~/naukri-agent/"
+
+      - name: Install dependencies and restart the bot
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          ssh -i ~/.ssh/id_oracle "$TARGET" \
+            "cd ~/naukri-agent && .venv/bin/pip install -q -r requirements.txt && .venv/bin/python main.py validate && sudo systemctl restart naukri-bot"

@@ -1,0 +1,82 @@
+# Naukri profile refresh agent - what to change each day.
+# Every value here ends up on your public profile, so keep it truthful.
+
+schedule:
+  # Random delay (seconds) before each run / between users, so it isn't the exact same second daily.
+  max_jitter_seconds: 120
+  # Hours (IST) at which the Telegram bot updates every active user.
+  run_hours: [9, 10, 11, 12]
+
+headline:
+  # One variant is used per day, in order, then it loops.
+  # Variant 0 should be your CURRENT headline (the first run moves to variant 1).
+  # Naukri allows max 250 characters.
+  variants:
+    - "DevOps Engineer | 2 Yrs | AWS & Azure | Kubernetes (EKS/AKS), Docker, Helm | Terraform, Ansible | CI/CD: Jenkins, Azure DevOps, GitHub Actions, ArgoCD | DevSecOps | Prometheus, Grafana | Linux, Python | SRE"
+    - "DevOps / SRE Engineer | 2 Yrs | AWS, Azure | Kubernetes (EKS/AKS), Helm, Docker | Terraform, Ansible (IaC) | CI/CD: Jenkins, GitHub Actions, Azure DevOps, ArgoCD (GitOps) | DevSecOps | Prometheus & Grafana | Python"
+    - "Cloud DevOps Engineer | 2 Yrs | AWS & Azure | Kubernetes (EKS/AKS) | Terraform, Ansible | Jenkins, Azure DevOps, GitHub Actions, ArgoCD | Docker, Helm | DevSecOps (SonarQube, OWASP ZAP) | Linux, Python"
+    - "DevOps Engineer (2 Yrs) | Kubernetes, Docker, Helm | AWS, Azure | Terraform, Ansible | CI/CD: Jenkins, GitHub Actions, Azure DevOps, ArgoCD | Monitoring: Prometheus, Grafana | DevSecOps | Linux | Python | SRE"
+    - "DevOps & Cloud Engineer | 2 Yrs | AWS, Azure | EKS/AKS Kubernetes | IaC: Terraform, Ansible | CI/CD: Jenkins, Azure DevOps, GitHub Actions | GitOps: ArgoCD | DevSecOps | Observability: Prometheus, Grafana"
+
+key_skills:
+  # Never removed.
+  core:
+    - Python
+    - Linux
+    - AWS
+    - Azure DevOps
+    - Docker
+    - Kubernetes
+    - Jenkins CI
+    - Github
+    - Grafana
+    - Terraform
+    - Helm
+    - Hashicorp Vault
+    - Ansible
+    - Prometheus
+    - Devsecops
+    - Infrastructure as Code
+    - Sonarqube
+    - OWASP Zap
+    - Langchain
+    - Agentic Ai
+    - MongoDB
+    - Postgresql
+  # Naukri caps Key skills at 250 characters in total (comma-joined). Core uses
+  # most of that; each day the free space is filled with the next pool skills
+  # that fit, starting one position further along the pool than yesterday.
+  # Only list skills you genuinely have, and only names from Naukri's own
+  # catalog (it ignores anything else) - verify with `python main.py check-skills`.
+  # (GitOps, ArgoCD and Amazon EKS are NOT in Naukri's catalog.)
+  rotation_pool:
+    - Redis
+    - Ci/Cd
+    - Rabbitmq
+    - Eks
+    - Apache Nifi
+    - Aks
+    - Github Actions
+    - Sast
+    - Sre
+    - Helm Charts
+    - Microsoft Azure
+    - GIT
+    - Shell Scripting
+    - Bash
+  # Removed whenever they show up on the profile.
+  remove_if_present:
+    - A
+
+it_skills:
+  # Names of EXISTING rows in your "IT skills" section, exactly as shown on the
+  # profile. One row is opened and re-saved per day (cycling through this list).
+  touch:
+    - Docker
+    - Kubernetes Deployment
+    - Terraform
+    - AWS
+    - DevOps Jenkins
+    - Azure DevOps
+    - Ansible
+

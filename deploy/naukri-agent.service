@@ -1,0 +1,13 @@
+[Unit]
+Description=Naukri profile refresh agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/.venv/bin/python main.py run
+# Allows up to 10 min waiting for an OTP reply on Telegram.
+TimeoutStartSec=20min
+Environment=PYTHONUNBUFFERED=1
