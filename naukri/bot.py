@@ -45,8 +45,8 @@ ADMIN_HELP = """
 
 <b>Admin</b>
 /users - list users
-/approve &lt;id&gt; - approve a user
-/deny &lt;id&gt; - reject a pending user
+/approve - approve the pending user (or tap ✅ Approve on the request)
+/deny - reject the pending user (or tap ❌ Deny)
 /remove &lt;id&gt; - delete a user and their data"""
 
 MENU = [
@@ -87,10 +87,16 @@ class Bot:
             return {}
         return r.json()
 
-    def send(self, chat: str, text: str) -> None:
+    def send(self, chat: str, text: str, buttons: Optional[list[list[tuple[str, str]]]] = None) -> None:
+        """buttons: rows of (label, callback_data) shown under the message."""
+        extra = {}
+        if buttons:
+            extra["reply_markup"] = json.dumps(
+                {"inline_keyboard": [[{"text": t, "callback_data": d} for t, d in row] for row in buttons]}
+            )
         for i in range(0, len(text), 3900):
             self.api("sendMessage", chat_id=chat, text=text[i : i + 3900], parse_mode="HTML",
-                     disable_web_page_preview="true")
+                     disable_web_page_preview="true", **extra)
 
     def run(self) -> None:
         self.api("setMyCommands", commands=json.dumps([{"command": c, "description": d} for c, d in MENU]))
@@ -108,6 +114,12 @@ class Bot:
                 continue
             for u in updates:
                 offset = u["update_id"] + 1
+                if "callback_query" in u:
+                    try:
+                        self.on_button(u["callback_query"])
+                    except Exception:
+                        log.exception("Handling button failed")
+                    continue
                 msg = u.get("message") or {}
                 if msg.get("chat", {}).get("type") == "private" and "text" in msg:
                     try:
@@ -142,8 +154,8 @@ class Bot:
                 else:
                     user.create(name, "pending")
                     self.send(chat, "👋 Hi! Your request has been sent to the admin. I'll message you once you're approved.")
-                    self.send(self.admin_id, f"🙋 <b>{escape(name)}</b> wants to use the bot.\n"
-                                             f"/approve {chat}   or   /deny {chat}")
+                    self.send(self.admin_id, f"🙋 <b>{escape(name)}</b> wants to use the bot.",
+                              buttons=self._decision_buttons(chat))
                     return
             if user.status == "pending":
                 return self.send(chat, "⏳ Still waiting for the admin to approve you.")
@@ -216,9 +228,20 @@ class Bot:
                 for u in users
             ]
             return self.send(self.admin_id, "\n".join(lines))
+        if not arg and cmd in ("/approve", "/deny"):
+            pending = [u for u in all_users(self.root) if u.status == "pending"]
+            if not pending:
+                return self.send(self.admin_id, "No pending requests.")
+            if len(pending) > 1:
+                for u in pending:
+                    self.send(self.admin_id, f"🙋 <b>{escape(u.name)}</b> is waiting.", buttons=self._decision_buttons(u.id))
+                return
+            arg = pending[0].id
         target = User(self.root, arg)
         if not arg or not target.exists:
             return self.send(self.admin_id, f"No user <code>{escape(arg)}</code>. See /users.")
+        if cmd == "/approve" and target.status != "pending":
+            return self.send(self.admin_id, f"{escape(target.name)} is already approved ({target.status}).")
         if cmd == "/approve":
             target.save(status="approved")
             self.send(target.id, "✅ You're approved! Send /login to connect your Naukri account.")
@@ -228,6 +251,24 @@ class Bot:
             self.send(target.id, "Your access to this bot was removed." if cmd == "/remove"
                       else "Sorry, your request was not approved.")
             self.send(self.admin_id, f"Removed {escape(target.name)} and their data.")
+
+    @staticmethod
+    def _decision_buttons(uid: str) -> list[list[tuple[str, str]]]:
+        return [[("✅ Approve", f"approve:{uid}"), ("❌ Deny", f"deny:{uid}")]]
+
+    def on_button(self, cq: dict) -> None:
+        """Approve / Deny buttons under a join request (admin only)."""
+        self.api("answerCallbackQuery", callback_query_id=cq["id"])
+        if str(cq.get("from", {}).get("id")) != self.admin_id:
+            return
+        action, _, uid = (cq.get("data") or "").partition(":")
+        if action not in ("approve", "deny") or not uid:
+            return
+        msg = cq.get("message") or {}
+        if msg:  # remove the buttons so they can't be pressed twice
+            self.api("editMessageReplyMarkup", chat_id=msg["chat"]["id"], message_id=msg["message_id"],
+                     reply_markup=json.dumps({"inline_keyboard": []}))
+        self._admin(f"/{action}", uid)
 
     # --- Jobs (worker thread) -------------------------------------------------
 
