@@ -312,7 +312,10 @@ class Bot:
             with NaukriBrowser(user.store(self.key), fresh=True) as nb:
                 nb.login(email, password, otp_provider=lambda: self._ask_otp(user.id))
                 headline = nb.page.locator("#lazyResumeHead, .resumeHeadline").first
-                headline_text = " ".join(headline.inner_text().split())[:200] if headline.count() else ""
+                raw = headline.inner_text() if headline.count() else ""
+                raw = raw.replace("editOneTheme", "").strip()
+                raw = raw[len("Resume headline"):] if raw.lower().startswith("resume headline") else raw
+                headline_text = " ".join(raw.split())[:200]
         except Exception as e:
             log.warning("Login failed for %s: %s", user.id, e)
             return self.send(user.id, f"❌ Login failed: {escape(str(e).splitlines()[0][:200])}\n\n"

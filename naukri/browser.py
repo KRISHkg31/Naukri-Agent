@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from playwright.sync_api import Error as PWError
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
@@ -84,7 +85,17 @@ class NaukriBrowser:
 
     def open_profile(self) -> bool:
         """Load the profile page. Returns False if Naukri bounced us to login."""
-        self.page.goto(PROFILE_URL, wait_until="domcontentloaded")
+        for attempt in range(3):
+            try:
+                self.page.goto(PROFILE_URL, wait_until="domcontentloaded")
+                break
+            except PWError as e:
+                # ERR_ABORTED: Naukri started its own navigation (e.g. right after an editor
+                # closed) and cancelled ours. Let it settle and try again.
+                if "ERR_ABORTED" not in str(e) or attempt == 2:
+                    raise
+                log.info("Profile navigation aborted, retrying")
+                self.page.wait_for_timeout(2000)
         try:
             self.page.get_by_text("Resume headline", exact=True).first.wait_for(timeout=20_000)
             self.page.wait_for_timeout(1500)  # let the lazy widgets finish rendering

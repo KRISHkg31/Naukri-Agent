@@ -92,11 +92,15 @@ def _cancel(page: Page) -> None:
 def rotate_headline_parts(text: str) -> str:
     """Keep the first '|' part (the job title) and rotate the rest by one.
 
-    Same facts, different order. Headlines without at least 3 parts are returned unchanged.
+    Same facts, different order. Headlines without at least 3 '|' parts get their final
+    full stop toggled instead ("...Ready." <-> "...Ready"), so every run is a real edit.
     """
     parts = [p.strip() for p in text.split("|")]
     if len(parts) < 3:
-        return text
+        text = text.rstrip()
+        if text.endswith("."):
+            return text[:-1].rstrip()
+        return text + "." if len(text) < 250 else text
     rest = parts[1:]
     return " | ".join([parts[0]] + rest[1:] + rest[:1])
 

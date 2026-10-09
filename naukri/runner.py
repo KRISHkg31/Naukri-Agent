@@ -131,8 +131,13 @@ def run_update(
                     else:
                         nb.page.wait_for_timeout(random.randint(3_000, 8_000))
 
-        nb.open_profile()
-        last_updated = sections.last_updated_text(nb.page)
+        # Informational only - never fail a run because this last read didn't work.
+        try:
+            nb.open_profile()
+            last_updated = sections.last_updated_text(nb.page)
+        except Exception as e:
+            log.warning("Could not read 'last updated': %s", e)
+            last_updated = "Profile last updated - unknown"
         nb.save_session()
 
     if not dry_run:
