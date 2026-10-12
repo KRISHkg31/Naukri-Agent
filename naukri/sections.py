@@ -30,6 +30,12 @@ class SectionError(RuntimeError):
     pass
 
 
+def _pw_escape(text: str) -> str:
+    """re.escape() for patterns handed to Playwright. Playwright writes regexes as /.../flags,
+    so an unescaped '/' (e.g. the skill 'Ci/Cd') ends the pattern early and breaks the selector."""
+    return re.escape(text).replace("/", r"\/")
+
+
 def _ci_text_eq(text: str) -> str:
     """XPath predicate: element's own text equals `text`, case-insensitive."""
     if "'" in text:
@@ -198,7 +204,7 @@ def update_key_skills(
             missing.append(f"{skill} (input rejected)")
             continue
         suggestion = editor.locator("#sugLst_keySkillSugg li:visible, .sugCont li:visible").filter(
-            has_text=re.compile(rf"^\s*{re.escape(skill)}\s*$", re.I)
+            has_text=re.compile(rf"^\s*{_pw_escape(skill)}\s*$", re.I)
         )
         try:
             suggestion.first.click(timeout=8_000)
@@ -310,7 +316,7 @@ def touch_it_skill(page: Page, skill: str, dry_run: bool = False) -> dict:
     if not card.count():
         raise SectionError(f"IT skill row '{skill}' not found")
     # Each row's pencil is labelled "Edit IT skill: <name>".
-    edit = card.get_by_role("button", name=re.compile(rf"^Edit IT skill:\s*{re.escape(skill)}\s*$", re.I)).first
+    edit = card.get_by_role("button", name=re.compile(rf"^Edit IT skill:\s*{_pw_escape(skill)}\s*$", re.I)).first
     if not edit.count():
         edit = card.locator(
             f"xpath=.//*[{_ci_text_eq(skill)}]/ancestor-or-self::*[position()<=4][.//*[{EDIT_CLASS}]][1]//*[{EDIT_CLASS}]"
