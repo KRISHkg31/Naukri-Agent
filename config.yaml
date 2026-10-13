@@ -5,7 +5,7 @@ schedule:
   # Random delay (seconds) before each run / between users, so it isn't the exact same second daily.
   max_jitter_seconds: 120
   # Hours (IST) at which the Telegram bot updates every active user.
-  run_hours: [9, 10, 11, 12]
+  run_hours: [9, 11, 14, 16]
 
 headline:
   # One variant is used per day, in order, then it loops.

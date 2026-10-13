@@ -1,4 +1,4 @@
-"""Multi-user Telegram bot: onboarding, commands, and the 9/10/11/12 schedule.
+"""Multi-user Telegram bot: onboarding, commands, and the daily schedule (schedule.run_hours).
 
 One process, three threads:
   - main thread: long-polls Telegram and handles messages (never touches the browser)

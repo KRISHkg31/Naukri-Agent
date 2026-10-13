@@ -1,6 +1,6 @@
 # Naukri Profile Refresh Agent
 
-Every day at **09:00, 10:00, 11:00 and 12:00 IST** this agent logs in to Naukri and makes small, real edits so your
+Every day at **09:00, 11:00, 14:00 and 16:00 IST** this agent logs in to Naukri and re-saves your profile so your
 profile shows as recently updated:
 
 | Section | What changes daily |
@@ -17,7 +17,7 @@ messages you on Telegram and waits for you to reply with the code.
 GitHub repo ──push──▶ GitHub Actions (validate + rsync over SSH)
                               │
                               ▼
-Oracle VM (Ubuntu, Asia/Kolkata) ── systemd timer 09/10/11/12:00 ──▶ main.py run
+Oracle VM (Ubuntu, Asia/Kolkata) ── naukri-bot 09/11/14/16:00 ──▶ main.py bot
   data/storage_state.json  (saved Naukri session)          │
   data/state.json          (rotation position)             ├─▶ naukri.com (headless Chromium)
   .env                     (credentials, chmod 600)        └─▶ Telegram (report / OTP)

@@ -1,8 +1,8 @@
 [Unit]
-Description=Run the Naukri profile refresh agent daily at 09:00, 10:00, 11:00 and 12:00 IST
+Description=Run the Naukri profile refresh agent daily at 09:00, 11:00, 14:00 and 16:00 IST
 
 [Timer]
-OnCalendar=*-*-* 09,10,11,12:00:00 Asia/Kolkata
+OnCalendar=*-*-* 09,11,14,16:00:00 Asia/Kolkata
 AccuracySec=1s
 # If the VM was down at a scheduled time, run once as soon as it's back up.
 Persistent=true
